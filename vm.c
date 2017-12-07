@@ -74,46 +74,11 @@ static inline void vm_push(vm_env *env, size_t n);
         DISPATCH;                                                \
     } while (0)
 
-/* Constant pool max size */
-#define CPOOL_MAX_SIZE 100
-
-/* Instruction max size */
-#define INSTS_MAX_SIZE 200
-
-/* Temporary storage max size */
-#define TEMPS_MAX_SIZE 150
-
-/* OPCODE impl max size */
-#define OPCODE_IMPL_MAX_SIZE 256
-
-typedef struct {
-    size_t pc;    // program counter.
-    size_t sp;    // stack runs from the end of 'temps' region.
-    size_t from;  // the immediate PC before last branch/return.
-    size_t to;    // the immediate PC after last branch/return.
-} vm_regs;
-
-struct __vm_env {
-    vm_inst insts[INSTS_MAX_SIZE];             /* Program instructions */
-    vm_value cpool[CPOOL_MAX_SIZE];            /* Constant pool */
-    vm_value temps[TEMPS_MAX_SIZE];            /* Temporary storage */
-    vm_opcode_impl impl[OPCODE_IMPL_MAX_SIZE]; /* OPCODE impl */
-    vm_regs r;
-    int insts_count;
-    int cpool_count;
-    int temps_count;
-};
-
-struct __vm_seg_info {
-    char *mem;  // the pointer to actual memory
-    size_t sz;
-    vm_seg_info *next;
-};
-
 vm_env *vm_new()
 {
     vm_env *env = malloc(sizeof(vm_env));
     memset(env, 0, sizeof(vm_env));
+    env->symtab.count = 0;
     env->r.sp = TEMPS_MAX_SIZE;  // stack runs from the end of 'temps' region.
     return env;
 }
@@ -121,6 +86,13 @@ vm_env *vm_new()
 void vm_free(vm_env *env)
 {
     free(env);
+}
+
+vm_inst *vm_get_inst_by_address(vm_env *env, int addr)
+{
+    if (addr >= env->insts_count)
+        return NULL;
+    return &env->insts[addr];
 }
 
 size_t vm_add_const(vm_env *env, int type, void *value)

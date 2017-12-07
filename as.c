@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
+#include "as.h"
 #include "elf.h"
 #include "vm.h"
 #include "vm_codegen.h"
@@ -184,6 +186,10 @@ static inline vm_operand make_operand(vm_env *env, char *line, const char *data)
         op.type = TEMP;
         op.value.id = atoi(data + 1);
         break;
+    case '.':
+        op.type = LABEL;
+        op.value.label = strdup(data + 1);
+        break;
     case '"':
     case '\'':
         op.type = CONST;
@@ -231,18 +237,23 @@ static inline int make_result(vm_env *env, char *line, const char *data)
     return atoi(data + 1);
 }
 
-static void assemble_line(vm_env *env, char *line)
+static void assemble_line(vm_env *env, char *line, int pos)
 {
     char *line_backup = strdup(line);
     char *mnemonic = quoted_strsep(&line, " ");
+    const struct instruction *inst = find_inst(mnemonic);
+
+    if (!inst) {
+        insert_symtab(env, mnemonic, pos);
+        mnemonic = quoted_strsep(&line, " ");
+        inst = find_inst(mnemonic);
+        if (!inst)
+            FATALX(1, "instruction `%s' not found\n", mnemonic);
+    }
     char *op1 = quoted_strsep(&line, " ");
     char *op2 = quoted_strsep(&line, " ");
     char *result = quoted_strsep(&line, " ");
     vm_inst new_inst;
-    const struct instruction *inst = find_inst(mnemonic);
-
-    if (!inst)
-        FATALX(1, "instruction `%s' not found\n", mnemonic);
 
     memset(&new_inst, 0, sizeof(vm_inst));
 
@@ -265,15 +276,18 @@ void assemble_from_fd(vm_env *env, int fd)
     char *line = NULL;
     size_t size = 0;
     FILE *fp = fdopen(fd, "r");
+    int i = 0;
 
     while (getline(&line, &size, fp) != -1) {
         if (line[0] == ';' || line[0] == '\n')
             continue;
         /* Remove trailing newline feed */
         line[strcspn(line, "\r\n")] = 0;
-        assemble_line(env, line);
+        assemble_line(env, line, i);
+        i++;
     }
     free(line);
+    set_addresses(env);
 }
 
 #define ALIGN_TYPE long
@@ -383,4 +397,41 @@ int load_from_elf(vm_env *env, int fd)
     vm_seg_info_free_list(info_head);
 
     return -1;
+}
+void insert_symtab(vm_env *env, char *label, int address)
+{
+    assert(env->symtab.count < SYMBOL_TABLE_MAX_SIZE);
+    for (int i = 0; i < env->symtab.count; i++) {
+        assert(strcmp(label, env->symtab.labels[i]) != 0);
+    }
+
+    env->symtab.labels[env->symtab.count] = strdup(label);
+    env->symtab.addresses[env->symtab.count] = address;
+    env->symtab.count++;
+}
+
+int search_symtab(vm_env *env, char *label)
+{
+    for (int i = 0; i < env->symtab.count; i++) {
+        if (!strcmp(env->symtab.labels[i], label) != 0)
+            return env->symtab.addresses[i];
+    }
+    return -1;
+}
+
+void set_addresses(vm_env *env)
+{
+    vm_inst *inst = NULL;
+    for (int i = 0; (inst = vm_get_inst_by_address(env, i)) != NULL; i++) {
+        if (inst->op1.type == LABEL) {
+            int new_addr = search_symtab(env, inst->op1.value.label);
+            assert(new_addr != -1);
+            inst->op1.value.id = new_addr;
+        }
+        if (inst->op2.type == LABEL) {
+            int new_addr = search_symtab(env, inst->op2.value.label);
+            assert(new_addr != -1);
+            inst->op2.value.id = new_addr;
+        }
+    }
 }
