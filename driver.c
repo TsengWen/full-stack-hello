@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -32,6 +33,7 @@ int main(int argc, char **argv)
     int ignore_option = 0;
     int out_fd = -1;
     int in_fd = -1;
+    int temp0_val = 0;
 
     for (int i = 1; i < argc; i++) {
         if (ignore_option)
@@ -41,6 +43,10 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-h")) {
             printf("%s\n", help_text);
             return 0;
+        } else if (!strcmp(argv[i], "--input")) {
+            if (!argv[i + 1])
+                FATAL(-1, "--input need an integer argument, see -h\n");
+            temp0_val = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "-o")) {
             if (i++ == argc - 1)
                 FATAL(-1, "Missing output file name, see -h\n");
@@ -101,9 +107,11 @@ int main(int argc, char **argv)
             FATAL(-1, "output file opening error (%s)\n", strerror(errno));
     }
 
+    vm_env *env = vm_new();
+    vm_set_temp_value(env, 0, temp0_val);
+
     switch (req) {
     case ASSEMBLE_AND_EVAL: {
-        vm_env *env = vm_new();
         assemble_from_fd(env, in_fd);
         hook_opcodes(env);
         vm_run(env);
@@ -113,7 +121,6 @@ int main(int argc, char **argv)
     case ASSEMBLE_AND_WRITE_ELF: {
         int len;
 
-        vm_env *env = vm_new();
         assemble_from_fd(env, in_fd);
         len = write_to_elf(env, out_fd);
         vm_free(env);
@@ -123,7 +130,6 @@ int main(int argc, char **argv)
         break;
     }
     case LOAD_ELF_AND_EVAL: {
-        vm_env *env = vm_new();
         load_from_elf(env, in_fd);
         hook_opcodes(env);
         vm_run(env);

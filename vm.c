@@ -64,14 +64,14 @@ static inline void vm_push(vm_env *env, size_t n);
 #define VM_JGT() VM_J_TYPE_INST(>)
 #define VM_JNZ() VM_J_TYPE_INST(!=)
 
-#define VM_CALL_HANDLER()                               \
-    do {                                                \
-        if (OPCODE_IMPL(OPCODE).handler)                \
-            OPCODE_IMPL(OPCODE).handler(                \
-                vm_get_op_value(env, &OPCODE.op1),      \
-                vm_get_op_value(env, &OPCODE.op2),      \
-                vm_get_temp_value(env, OPCODE.result)); \
-        DISPATCH;                                       \
+#define VM_CALL_HANDLER()                                        \
+    do {                                                         \
+        if (OPCODE_IMPL(OPCODE).handler)                         \
+            OPCODE_IMPL(OPCODE)                                  \
+                .handler(vm_get_op_value(env, &OPCODE.op1),      \
+                         vm_get_op_value(env, &OPCODE.op2),      \
+                         vm_get_temp_value(env, OPCODE.result)); \
+        DISPATCH;                                                \
     } while (0)
 
 /* Constant pool max size */
@@ -144,6 +144,13 @@ size_t vm_add_inst(vm_env *env, vm_inst inst)
     env->insts[env->insts_count] = inst;
 
     return env->insts_count++;
+}
+
+void vm_set_temp_value(vm_env *env, int pos, int val)
+{
+    vm_value temp_v = {.type = INT};
+    temp_v.value.vint = val;
+    env->temps[pos] = temp_v;
 }
 
 static inline void vm_push(vm_env *env, size_t n)
