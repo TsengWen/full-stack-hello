@@ -21,7 +21,7 @@ OBJS = \
 deps := $(OBJS:%.o=.%.o.d)
 
 TEMP0 ?= 10
-IN_FILE ?= ./tests/fib.s
+IN_FILE ?= ./tests/fib_iterative.s
 
 fib: $(EXEC)
 	@./$(EXEC) --input $(TEMP0) $(IN_FILE)
